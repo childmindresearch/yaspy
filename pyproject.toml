@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm[toml]>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yaspy"
+dynamic = ["version"]
+authors = [
+    { name = "Connor Lane", email = "connor.lane858@gmail.com" },
+]
+description = "Yet another neuroimaging surface plotter."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT License"}
+
+dependencies = [
+    "matplotlib",
+    "nibabel",
+    "numpy",
+    "pillow",
+    "pyvista",
+]
+
+[project.optional-dependencies]
+examples = [
+    "jupyter",
+    "neuromaps",
+    "nilearn",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.1.0",
+    "ruff>=0.9.10",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/childmindresearch/yaspy"
+
+[tool.setuptools.packages.find]
+include = ["yaspy*"]
+
+[tool.setuptools_scm]
+version_file = "yaspy/_version.py"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "INFO"

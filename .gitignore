@@ -1,0 +1,28 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+_version.py
+
+# Virtual environments
+.venv
+.python-version
+
+# Unit test / coverage reports
+.coverage*
+.pytest_cache
+.mypy_cache
+htmlcov
+
+# VScode IDE
+.vscode/
+
+# Local scratch
+.scratch
+.trash
+
+# Jupyter
+.ipynb_checkpoints
