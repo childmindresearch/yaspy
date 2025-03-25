@@ -423,7 +423,7 @@ def _border_mask(surf: Surface, label: np.ndarray) -> np.ndarray:
     face_label = label[surf.faces]
     border_face_mask = face_label.min(axis=1) < face_label.max(axis=1)
     indices = surf.faces[border_face_mask].flatten()
-    mask = np.zeros(len(label), dtype=np.bool)
+    mask = np.zeros(len(label), dtype=bool)
     mask[indices] = True
     return mask
 
