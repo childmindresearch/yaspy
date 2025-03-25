@@ -2,7 +2,7 @@
 
 Yaspy (yet another surface plotting python library) is a tool for making neuroimaging surface plots, from simple screenshots to multi-panel montages to publication ready figures. It is built on top of [PyVista](https://docs.pyvista.org/), [Matplotlib](https://matplotlib.org/), and [Pillow](https://pillow.readthedocs.io/en/stable/index.html).
 
-<p align="center">
+<p style="text-align: center">
   <img src="doc/_static/img/rsfc_principal_gradient.png" style="max-height: 250px">
 </p>
 
@@ -35,8 +35,8 @@ plotter = yaspy.Plotter(surf_path, hemi="lh", sulc=sulc_path)
 plotter.screenshot(view="lateral")
 ```
 
-<p align="left">
-  <img src="doc/_static/img/example.png" style="max-height: 250px">
+<p style="text-align: left">
+  <img src="doc/_static/img/example.png" style="max-height: 200px">
 </p>
 
 ## Tutorial
