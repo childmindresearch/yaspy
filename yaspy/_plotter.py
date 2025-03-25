@@ -227,6 +227,37 @@ class Plotter:
         self._overlays.append(overlay)
         return overlay
 
+    def border(
+        self,
+        label: np.ndarray,
+        color: Any = "black",
+        alpha: float | None = None,
+    ) -> Overlay:
+        """Overlay the borders of labeled regions.
+
+        Parameters
+        ----------
+        label : ndarray of shape (n_points,)
+            label array, each region should have the same label ID.
+        color : any, default='black'
+            Color of the borders
+        alpha : float, default=None
+            Alpha transparency value.
+
+        Returns
+        -------
+        overlay : Overlay
+            The border overlay object.
+        """
+        mask = _border_mask(self._surf, label)
+        rgba = to_rgba(color, alpha=alpha)
+        values = np.where(mask[:, None], rgba, (1.0, 1.0, 1.0, 0.0))
+
+        self._plotter.actors.clear()
+        overlay = Overlay(values=values)
+        self._overlays.append(overlay)
+        return overlay
+
     def _render(self) -> np.ndarray:
         """Combine the overlays and render the 3D scene."""
         layers = [self._base_overlay.pixel_values()]
@@ -377,6 +408,24 @@ def _constant_overlay(n_points: int, color: Any) -> Overlay:
 def _sulc_overlay(values: np.ndarray, cmin: float = 0.4, cmax: float = 0.6) -> Overlay:
     """Create a binary sulcal depth overlay."""
     return Overlay(np.where(values < 0, cmin, cmax), cmap="gray", vmin=0.0, vmax=1.0)
+
+
+def _border_mask(surf: Surface, label: np.ndarray) -> np.ndarray:
+    """Find all vertices that lie on the boundary of two labeled regions.
+
+    References:
+        Got the idea for mask of border vertices from here:
+        https://github.com/MICA-MNI/BrainSpace/blob/v0.1.20/brainspace/mesh/array_operations.py#L453
+    """
+    if label.shape != (len(surf.points),):
+        raise ValueError(f"Invalid label; expected shape ({len(surf.points)},).")
+
+    face_label = label[surf.faces]
+    border_face_mask = face_label.min(axis=1) < face_label.max(axis=1)
+    indices = surf.faces[border_face_mask].flatten()
+    mask = np.zeros(len(label), dtype=np.bool)
+    mask[indices] = True
+    return mask
 
 
 def _alpha_composite(layers: list[np.ndarray]) -> np.ndarray:
