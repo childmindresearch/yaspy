@@ -125,10 +125,16 @@ class Overlay(ScalarMappable):
 
         Returns
         -------
-        ndarray of shape (n_points, 4)
+        values : ndarray of shape (n_points, 4)
             RGBA color values for each surface point.
         """
-        return self.to_rgba(self.get_array(), alpha=self._alpha).squeeze(0)
+        values = self.to_rgba(self.get_array(), alpha=self._alpha)
+        # Nb, values can be (is always?) a masked array. Convert to regular ndarray.
+        if isinstance(values, np.ma.MaskedArray):
+            values = values.filled()
+        # Remove extra leading dimension.
+        values = values.squeeze(0)
+        return values
 
 
 class Plotter:
@@ -159,9 +165,6 @@ class Plotter:
         if isinstance(surf, (str, Path)):
             surf = _read_surface(surf)
         self._surf = Surface(*surf)
-        self._hemi = hemi
-        self._color = color
-        self._width = width
 
         n_points = len(self._surf.points)
         if sulc is not None:
@@ -171,16 +174,48 @@ class Plotter:
                 raise ValueError(
                     f"sulc data doesn't match surface; expected shape ({n_points},)."
                 )
-            self._base_overlay = _sulc_overlay(sulc)
-        else:
-            self._base_overlay = _constant_overlay(n_points, color)
+        self._sulc = sulc
 
-        self._poly = _surface_to_polydata(surf)
-        self._plotter = pv.Plotter(
-            window_size=(int(WINDOW_SCALE * width), int(WINDOW_SCALE * 0.75 * width)),
+        self._hemi = hemi
+        self._color = color
+        self._width = width
+
+        self._overlays: list[Overlay] = []
+        self._create_pv_plotter()
+
+    def _create_pv_plotter(self):
+        # Base RGBA layer.
+        if self._sulc is not None:
+            base_layer = _sulc_overlay(self._sulc).pixel_values()
+        else:
+            n_points = len(self._surf.points)
+            base_layer = _constant_overlay(n_points, self._color).pixel_values()
+
+        # Composite RGBA values.
+        pixel_values = base_layer.copy()
+
+        poly = _surface_to_polydata(self._surf)
+        poly["pixel_values"] = pixel_values
+
+        # Create pyvista plotter and add mesh.
+        plotter = pv.Plotter(
+            window_size=(
+                int(WINDOW_SCALE * self._width),
+                int(WINDOW_SCALE * 0.75 * self._width),
+            ),
             off_screen=True,
         )
-        self._overlays: list[Overlay] = []
+        plotter.add_mesh(
+            poly,
+            scalars="pixel_values",
+            rgb=True,
+            show_scalar_bar=False,
+        )
+
+        self._base_layer = base_layer
+        self._pixel_values = pixel_values
+        self._poly = poly
+        self._plotter = plotter
 
     def overlay(
         self,
@@ -219,12 +254,15 @@ class Plotter:
         if len(values) != n_points:
             raise ValueError(f"Overlay doesn't match surface; expected {n_points=}.")
 
-        # Invalidate the plotter. Note, plotter.clear() also clears shading properties.
-        self._plotter.actors.clear()
         overlay = Overlay(
             values=values, cmap=cmap, norm=norm, vmin=vmin, vmax=vmax, alpha=alpha
         )
         self._overlays.append(overlay)
+
+        # Update the mesh pixel values.
+        # Note, reassign of poly scalars is needed to trigger update event.
+        _alpha_composite(self._pixel_values, overlay.pixel_values())
+        self._poly["pixel_values"] = self._pixel_values
         return overlay
 
     def border(
@@ -243,34 +281,15 @@ class Plotter:
             Color of the borders
         alpha : float, default=None
             Alpha transparency value.
-
-        Returns
-        -------
-        overlay : Overlay
-            The border overlay object.
         """
         mask = _border_mask(self._surf, label)
         rgba = to_rgba(color, alpha=alpha)
         values = np.where(mask[:, None], rgba, (1.0, 1.0, 1.0, 0.0))
 
-        self._plotter.actors.clear()
-        overlay = Overlay(values=values)
-        self._overlays.append(overlay)
-        return overlay
-
-    def _render(self) -> np.ndarray:
-        """Combine the overlays and render the 3D scene."""
-        layers = [self._base_overlay.pixel_values()]
-        layers += [overlay.pixel_values() for overlay in self._overlays]
-        composite = _alpha_composite(layers)
-
-        self._plotter.actors.clear()
-        self._plotter.add_mesh(
-            self._poly.copy(),
-            scalars=composite,
-            rgb=True,
-            show_scalar_bar=False,
-        )
+        # Update the mesh pixel values.
+        # Note, reassign of poly scalars is needed to trigger update event.
+        _alpha_composite(self._pixel_values, values)
+        self._poly["pixel_values"] = self._pixel_values
 
     def screenshot(
         self,
@@ -298,9 +317,6 @@ class Plotter:
             camera_pos = VIEW_CAMERA_POS_MAP[(self._hemi, View(view).value)]
         else:
             camera_pos = view
-
-        if len(self._plotter.renderer.actors) == 0:
-            self._render()
 
         self._plotter.camera_position = camera_pos
         self._plotter.render()
@@ -351,7 +367,10 @@ class Plotter:
     def clear(self) -> None:
         """Clear all overlays from the plotter."""
         self._overlays.clear()
-        self._plotter.actors.clear()
+        # Reset the pixel value map to the base layer.
+        # Note, this is a copy of values and in-place update.
+        self._pixel_values[:] = self._base_layer
+        self._poly["pixel_values"] = self._pixel_values
 
 
 def _read_surface(path: Path) -> Surface:
@@ -428,29 +447,17 @@ def _border_mask(surf: Surface, label: np.ndarray) -> np.ndarray:
     return mask
 
 
-def _alpha_composite(layers: list[np.ndarray]) -> np.ndarray:
-    """Make alpha blend of a stack of RGBA layers."""
-    assert len(layers) > 0, "expected at least one layer"
-    assert all(
-        layer.ndim == 1 or (layer.ndim == 2 and layer.shape[1] in {3, 4})
-        for layer in layers
-    ), "expected layers to be shape (n_points,) or (n_points, {3, 4})"
+def _alpha_composite(input: np.ndarray, layer: np.ndarray) -> None:
+    """Make alpha composite of two 1D RGB(A) arrays.
 
-    sizes = set(len(layer) for layer in layers)
-    assert len(sizes) == 1
-    size = sizes.pop()
-
-    # Make all layers appear like image array, shape (1, width).
-    layers = [layer[None] for layer in layers]
-
-    # Make composite.
-    output = np.zeros((1, size, 4), dtype=layers[0].dtype)
-    transform = IdentityTransform()
-    for layer in layers:
-        image.resample(layer, output, transform=transform, interpolation=image.NEAREST)
-
-    output = output.squeeze(0)
-    return output
+    Note, the input image is modified in place.
+    """
+    image.resample(
+        layer[None],
+        input[None],
+        transform=IdentityTransform(),
+        interpolation=image.NEAREST,
+    )
 
 
 def _crop_transparent_background(image: np.ndarray) -> np.ndarray:
