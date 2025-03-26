@@ -43,6 +43,18 @@ plotter.screenshot(view="lateral")
 
 See our [tutorial notebook](examples/tutorial.ipynb) for an in-depth tour of what you can do with yaspy.
 
+## Benchmark
+
+One of the main goals of yaspy is to render surface screenshots fast. On a Mac laptop, yaspy (i.e. pyvista/VTK) renders at about 240 frames per second.
+
+```
+[INFO 25-03-26 14:10:18]: Benchmarking yaspy overlay screenshots...
+100%|████████████████████████████████████████████████████████████████| 1000/1000 [00:04<00:00, 236.82it/s]
+[INFO 25-03-26 14:10:23]: Yaspy overlay screenshot FPS: 236.7
+```
+
+See the [benchmark script](examples/benchmark.py) for more details.
+
 ## Related libraries
 
 - [nilearn](https://nilearn.github.io/dev/modules/generated/nilearn.plotting.plot_surf.html)
