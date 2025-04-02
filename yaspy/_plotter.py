@@ -313,13 +313,7 @@ class Plotter:
         img: Image.Image
             The rendered surface image.
         """
-        if isinstance(view, (View, str)):
-            camera_pos = VIEW_CAMERA_POS_MAP[(self._hemi, View(view).value)]
-        else:
-            camera_pos = view
-
-        self._plotter.camera_position = camera_pos
-        self._plotter.render()
+        self._set_view(view)
         img = self._plotter.screenshot(return_img=True, transparent_background=True)
 
         img = _crop_transparent_background(img)
@@ -363,6 +357,26 @@ class Plotter:
         if len(self._overlays) > 0:
             return self._overlays[-1]
         return None
+
+    def show(self, view: View | CameraPos = View.LATERAL):
+        """Display the interactive PyVista plotter window.
+
+        Parameters
+        ----------
+        view : View or CameraPos, default=View.LATERAL
+            Initial view or camera position.
+        """
+        self._set_view(view)
+        self._plotter.show()
+
+    def _set_view(self, view: View | CameraPos = View.LATERAL):
+        """Set the camera view."""
+        if isinstance(view, (View, str)):
+            camera_pos = VIEW_CAMERA_POS_MAP[(self._hemi, View(view).value)]
+        else:
+            camera_pos = view
+        self._plotter.camera_position = camera_pos
+        self._plotter.render()
 
     def clear(self) -> None:
         """Clear all overlays from the plotter."""
